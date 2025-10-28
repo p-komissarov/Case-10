@@ -28,6 +28,21 @@ def _parse_date(date_str: str) -> str | None:
     return None
 
 
+def _format_rub(amount: float) -> str:
+
+    """
+    Utility function to format amount as Russian ruble currency string.
+
+    Args:
+        amount (float): Amount in rubles.
+    Returns:
+        str: Formatted amount string.
+    """
+
+    rub = f"{amount:,.2f} ru.RUBLES".replace(",", " ")
+    return rub
+
+
 def read_csv_file(filename: str) -> list:
 
     """
@@ -40,7 +55,7 @@ def read_csv_file(filename: str) -> list:
     """
 
     if not os.path.exists(filename):
-        raise FileNotFoundError(f"Файл не найден: {filename}")
+        raise FileNotFoundError(f"{ru.FILE_NOT_FOUND} {filename}")
     rows = []
     with open(filename, "r", encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
@@ -61,7 +76,7 @@ def read_json_file(filename: str) -> list:
     """
 
     if not os.path.exists(filename):
-        raise FileNotFoundError(f"Файл не найден: {filename}")
+        raise FileNotFoundError(f"{ru.FILE_NOT_FOUND} {filename}")
     with open(filename, "r", encoding="utf-8") as f:
         data = json.load(f)
     return data
@@ -87,15 +102,14 @@ def import_financial_data(filename: str) -> list:
     elif ext == ".json":
         raw = read_json_file(filename)
     else:
-        raise ValueError("Поддерживаются только .csv и .json")
+        raise ValueError(ru.SUPPORTED_FILES)
 
     rows = []
     for r in raw:
         date = r["date"]
         amount = float(r["amount"])
         desc = r.get("description", "") or ""
-        typ = r.get("type", "") or ("расход" if amount < 0 else "доход")
-        rows.append({"date": date, "amount": amount, "description": desc, "type": typ})
+        rows.append({"date": date, "amount": amount, "description": desc})
     return rows
 
 
@@ -207,7 +221,7 @@ def calculate_basic_stats(transactions: dict) -> dict:
         "balance": round(balance, 2),
         "transactions_count": len(transactions),
         "income_count": income_count,
-        "expense_count": expense_count,
+        "expense_count": expense_count
     }
 
 
@@ -238,13 +252,13 @@ def calculate_by_category(transactions: dict) -> dict:
         category = tx.get("category") or ru.OTHER
         category = category if isinstance(category, str) else ru.OTHER
 
-        category_totals[category] += amount
-        category_counts[category] += 1
-
         if amount < 0:
             expense = abs(amount)
             category_expense_totals[category] += expense
             total_expenses += expense
+
+        category_totals[category] += amount
+        category_counts[category] += 1
 
     result = {}
     for cat in category_counts:
@@ -256,7 +270,7 @@ def calculate_by_category(transactions: dict) -> dict:
             "total": round(category_totals.get(cat, 0), 2),
             "expense_total": round(expense_total, 2),
             "count": category_counts[cat],
-            "percent_of_expenses": round(percent, 2),
+            "percent_of_expenses": round(percent, 2)
         }
 
     return result
@@ -307,135 +321,127 @@ def analyze_by_time(transactions: list) -> dict:
         result[month] = {
             "income": round(months_income.get(month, 0), 2),
             "expense": round(months_expense.get(month, 0), 2),
-            "top_categories": top,
+            "top_categories": top
         }
 
     return result
 
 
-def analyze_historical_spending(transactions: list) -> dict:
+def analyze_historical_spending(months_analysis: dict) -> dict:
 
     """
-    Analyzes the user's transaction history:
-    # 1. Calculates average monthly spending by category
-    # 2. Identifies seasonal patterns
-    # 3. Determines which categories have the highest spending
-    # 4. Returns planning recommendations
+    Analyzes historical spending data to compute average monthly spending and income.
+
     Args:
-        transactions (list): list with numerical values ​​of transactions
+        months_analysis (dict): Monthly analysis data from analyze_by_time
     Returns:
-        analysis (dict): A dictionary containing average costs, seasonal patterns,the
-        user's most expensive categories, and budget planning recommendations.
+        dict: Analysis results including average monthly spending, income, and top categories.
     """
+    total_spending = 0
+    total_income = 0
+    month_count = len(months_analysis)
+    category_totals = defaultdict(float)
 
-    monthly_stats = {}
-    for transaction in transactions:
-        date = transaction["date"]
-        month = date[:7]
-        category = transaction["category"]
-        amount = abs(transaction["amount"])
-        
-        if month not in monthly_stats:
-            monthly_stats[month] = {}
-        if category not in monthly_stats[month]:
-            monthly_stats[month][category] = 0
-        monthly_stats[month][category] += amount
-    
-
-    category_totals = {}
-    category_counts = {}
-    for month, categories in monthly_stats.items():
-        for category, amount in categories.items():
-            if category not in category_totals:
-                category_totals[category] = 0
-                category_counts[category] = 0
+    for month_data in months_analysis.values():
+        total_spending += month_data.get("expense", 0)
+        total_income += month_data.get("income", 0)
+        for category, amount in month_data.get("top_categories", []):
             category_totals[category] += amount
-            category_counts[category] += 1
-    
-    average_monthly = {}
-    for category in category_totals:
-        average_monthly[category] = category_totals[category] / category_counts[category]
-    
-    seasonal_patterns = {}
-    for month in monthly_stats:
-        seasonal_patterns[month] = sum(monthly_stats[month].values())
-    
-    sorted_categories = sorted(average_monthly.items(), key=lambda i: i[1], reverse=True)
-    top_categories = {}
-    for i in range(min(3, len(sorted_categories))):
-        category, amount = sorted_categories[i]
-        top_categories[category] = amount
-    
-    recommendations = []
-    if top_categories:
-        first_category = list(top_categories.items())[0]
-        recommendations.append(f"Самые крупные траты: {first_category[0]} ({first_category[1]:.0f} руб/мес)")
 
-    analysis = {
-        "average_monthly_spending": average_monthly,
-        "seasonal_patterns": seasonal_patterns,
-        "top_categories": top_categories,
-        "recommendations": recommendations
+    average_monthly_spending = round(total_spending / month_count, 2) if month_count > 0 else 0
+    average_monthly_income = round(total_income / month_count, 2) if month_count > 0 else 0
+
+    top_categories = dict(sorted(category_totals.items(), key=lambda item: item[1], reverse=True)[:3])
+
+    return {
+        "average_monthly_spending": average_monthly_spending,
+        "average_monthly_income": average_monthly_income,
+        "total_avg_spending": round(total_spending / month_count, 2) if month_count > 0 else 0,
+        "top_categories": top_categories
     }
-    return analysis
 
 
-def create_budget_template(analysis: dict) -> dict:
+def create_budget_template(analysis: dict, current_stats: dict) -> dict:
 
     """
-    Offers limits by category (10% less than average), takes into account the user's 
-    income (we assume a fixed income), and adds a "savings" category (20% of income).
+    Creates budget recommendations based on historical analysis and current financial situation.
 
     Args:
-        analysis (dict): A dictionary containing average costs, seasonal patterns,the
-        user's most expensive categories, and budget planning recommendations.
+        analysis (dict): Historical spending analysis
+        current_stats (dict): Current period statistics from calculate_basic_stats
     Returns:
-        dict: A dictionary containing the user's income, budget limits by category, and the user's savings amount.
+        dict: Budget recommendations with verdict, advice and goal
     """
 
     avg_spending = analysis["average_monthly_spending"]
+    total_avg_spending = analysis["total_avg_spending"]
+    avg_income = analysis["average_monthly_income"]
+    
+    current_income = current_stats["total_income"]
+    current_spending = current_stats["total_expense"]
+    current_savings = current_income - current_spending
+    
     budget_limits = {}
     for category, avg_amount in avg_spending.items():
         budget_limits[category] = round(avg_amount * 0.9)
+
+    verdict = ""
+    advice = ""
+    goal = ""
     
-    monthly_income = 50000 #здесь доход пользователя надо
+    if current_income >= avg_income and current_spending <= total_avg_spending:
+        verdict = ru.GOOD_VERDICT
     
-    savings_target = monthly_income * 0.2
-    budget_limits["накопления"] = savings_target
+        if analysis["top_categories"]:
+            top_category = list(analysis["top_categories"].keys())[0]
+            top_amount = analysis["top_categories"][top_category]
+            suggested_reduction = round(top_amount * 0.1)
+            advice = f"💡 Совет: Попробуйте сократить траты на {top_category} на {suggested_reduction} руб."
+        else:
+            advice = "💡 Совет: Продолжайте в том же духе!"
+    else:
+        if current_income < avg_income:
+            income_diff = avg_income - current_income
+            verdict = "⚠️ Доход ниже среднего"
+            advice = f"💡 Совет: Рассмотрите варианты увеличения дохода на {income_diff:.0f} руб."
+        else:
+            spending_diff = current_spending - total_avg_spending
+            verdict = "⚠️ Траты превышают средние"
+            advice = f"💡 Совет: Постарайтесь сократить расходы на {spending_diff:.0f} руб."
+    
+    savings_target = round(current_income * 0.2)
+    goal = f"🎯 Цель: Накопить {savings_target} руб. к концу месяца"
     
     return {
-        "monthly_income": monthly_income,
+        "verdict": verdict,
+        "advice": advice,
+        "goal": goal,
         "budget_limits": budget_limits,
         "savings_target": savings_target
     }
 
 
-def compare_budget_vs_actual(budget: dict, actual_transactions: list) -> dict:
+def compare_budget_vs_actual(budget: dict, actual_transactions: list, category_stats: dict) -> dict:
 
     """
-    Compares planned budget with actual spending, calculates expenses by category, 
-    determines where the user stayed within budget and where they exceeded it.
-    
+    Compares planned budget with actual spending and provides category-specific analysis.
+
     Args:
-        budget (dict): A dictionary containing the user's income, budget limits by category, 
-                      and savings target
-        actual_transactions (list): A list of transactions with categories and amounts 
-                                   for the period being analyzed
-                                   
+        budget (dict): Budget recommendations from create_budget_template
+        actual_transactions (list): Current period transactions
+        category_stats (dict): Category statistics from calculate_by_category
     Returns:
-        dict: A dictionary containing detailed comparison by category, lists of categories 
-              within and exceeded budget, and total amounts
+        dict: Comparison results with detailed analysis
     """
 
     actual_spending = {}
-    for transaction in actual_transactions:
-        category = transaction["category"]
-        amount = abs(transaction["amount"])
-        if category not in actual_spending:
-            actual_spending[category] = 0
-        actual_spending[category] += amount
+    for category, data in category_stats.items():
+        actual_spending[category] = data["expense_total"]
     
     comparison = {}
+    within_budget = []
+    exceeded_budget = []
+    
     for category, budget_limit in budget["budget_limits"].items():
         actual = actual_spending.get(category, 0)
         difference = budget_limit - actual
@@ -444,30 +450,81 @@ def compare_budget_vs_actual(budget: dict, actual_transactions: list) -> dict:
         comparison[category] = {
             "budget": budget_limit,
             "actual": actual,
-            "difference": difference,
+            "difference": abs(difference),
             "status": status
         }
-    
-    within_budget = []
-    exceeded_budget = []
-    
-    for category, data in comparison.items():
-        if data["status"] == "в рамках бюджета":
+        
+        if status == "в рамках бюджета":
             within_budget.append(category)
         else:
             exceeded_budget.append(category)
     
-
+    total_budget = sum(budget["budget_limits"].values())
+    total_actual = sum(actual_spending.values())
+    overall_status = "в рамках бюджета" if total_actual <= total_budget else "превышение"
+    
     return {
         "comparison": comparison,
         "within_budget": within_budget,
         "exceeded_budget": exceeded_budget,
-        "total_budget": sum(budget["budget_limits"].values()),
-        "total_actual": sum(actual_spending.values())
+        "total_budget": total_budget,
+        "total_actual": total_actual,
+        "overall_status": overall_status
     }
 
 
-def print_report(stats: dict, category_stats: dict, budget: dict) -> None:
+def compare_budget_vs_actual(budget: dict, category_stats: dict) -> dict:
+
+    """
+    Compares planned budget with actual spending and provides category-specific analysis.
+
+    Args:
+        budget (dict): Budget recommendations from create_budget_template
+        category_stats (dict): Category statistics from calculate_by_category
+    Returns:
+        dict: Comparison results with detailed analysis
+    """
+
+    actual_spending = {}
+    for category, data in category_stats.items():
+        actual_spending[category] = data["expense_total"]
+    
+    comparison = {}
+    within_budget = []
+    exceeded_budget = []
+    
+    for category, budget_limit in budget["budget_limits"].items():
+        actual = actual_spending.get(category, 0)
+        difference = budget_limit - actual
+        status = "в рамках бюджета" if difference >= 0 else "превышение"
+        
+        comparison[category] = {
+            "budget": budget_limit,
+            "actual": actual,
+            "difference": abs(difference),
+            "status": status
+        }
+        
+        if status == "в рамках бюджета":
+            within_budget.append(category)
+        else:
+            exceeded_budget.append(category)
+    
+    total_budget = sum(budget["budget_limits"].values())
+    total_actual = sum(actual_spending.values())
+    overall_status = "в рамках бюджета" if total_actual <= total_budget else "превышение"
+    
+    return {
+        "comparison": comparison,
+        "within_budget": within_budget,
+        "exceeded_budget": exceeded_budget,
+        "total_budget": total_budget,
+        "total_actual": total_actual,
+        "overall_status": overall_status
+    }
+
+
+def print_report(stats: dict, category_stats: dict, budget: dict, budget_comparison: dict) -> None:
 
     """
     Function to print a summary report of financial statistics.
@@ -480,30 +537,42 @@ def print_report(stats: dict, category_stats: dict, budget: dict) -> None:
 
     print("=== ФИНАНСОВЫЙ ОТЧЕТ ===\n")
     print("ОСНОВНЫЕ ПОКАЗАТЕЛИ:")
-    for key, value in stats.items():
-        print(f"  {key.replace('_', ' ').title()}: {value}")
+    print(f"  💰 Доходы: {_format_rub(stats.get("total_income"))}")
+    print(f"  💸 Расходы: {_format_rub(stats.get("total_expense"))}")
+    print(f"  ⚖️ Баланс: {_format_rub(stats.get("balance"))}")
     print("\nРАСХОДЫ ПО КАТЕГОРИЯМ:")
     for category, data in category_stats.items():
-        print(f"  Category: {category}")
-        for key, value in data.items():
-            print(f"    {key.replace('_', ' ').title()}: {value}")
+        print(f"  {category}: {_format_rub(data.get("expense_total"))} ({data.get("percent_of_expenses")}%)")
     print("\nРЕКОМЕНДАЦИИ ПО БЮДЖЕТУ:")
-    for category, amount in budget.items():
-        print(f"  {category}: {amount}")
+    print(budget["verdict"])
+    print(budget["advice"])
+    print(budget["goal"])
+    if budget_comparison["overall_status"] == "в рамках бюджета":
+        print("\n📊 ВЫПОЛНЕНИЕ БЮДЖЕТА: ✅ В рамках плана")
+    else:
+        overspend = budget_comparison["total_actual"] - budget_comparison["total_budget"]
+        print(f"\n📊 ВЫПОЛНЕНИЕ БЮДЖЕТА: ⚠️ Превышение на {overspend:,.0f} руб.".replace(',', ' '))
 
 
 def main():
-    transactions = import_financial_data("my_money.csv")
+
+    """ 
+    Main function to run the financial analysis and reporting. 
+    """
+
+    transactions = import_financial_data("money.csv")
 
     categorized_transactions = categorize_all_transactions(transactions)
     
     stats = calculate_basic_stats(categorized_transactions)
+    months_analysis = analyze_by_time(categorized_transactions)
     category_stats = calculate_by_category(categorized_transactions)
     
-    analysis = analyze_historical_spending(categorized_transactions)
-    budget = create_budget_template(analysis)
+    analysis = analyze_historical_spending(stats, months_analysis, )
+    budget = create_budget_template(analysis, stats)
+    budget_comparison = compare_budget_vs_actual(budget, category_stats)
     
-    print_report(stats, category_stats, budget)
+    print_report(stats, category_stats, budget, budget_comparison)
 
 
 if __name__ == "__main__":   
