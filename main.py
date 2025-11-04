@@ -1,3 +1,5 @@
+# Case №10 by Greshnova S., Loseva E., Shevchenko A., Komissarov P.
+
 from datetime import datetime
 import csv
 import json
@@ -39,7 +41,7 @@ def _format_rub(amount: float) -> str:
         str: Formatted amount string.
     """
 
-    rub = f"{amount:,.2f} ru.RUBLES".replace(",", " ")
+    rub = f"{amount:,.2f} {ru.RUBLES}".replace(",", " ")
     return rub
 
 
@@ -337,6 +339,7 @@ def analyze_historical_spending(months_analysis: dict) -> dict:
     Returns:
         dict: Analysis results including average monthly spending, income, and top categories.
     """
+
     total_spending = 0
     total_income = 0
     month_count = len(months_analysis)
@@ -351,7 +354,7 @@ def analyze_historical_spending(months_analysis: dict) -> dict:
     average_monthly_spending = round(total_spending / month_count, 2) if month_count > 0 else 0
     average_monthly_income = round(total_income / month_count, 2) if month_count > 0 else 0
 
-    top_categories = dict(sorted(category_totals.items(), key=lambda item: item[1], reverse=True)[:3])
+    top_categories = dict(sorted(category_totals.items(), key=lambda i: i[1], reverse=True)[:3])
 
     return {
         "average_monthly_spending": average_monthly_spending,
@@ -364,112 +367,59 @@ def analyze_historical_spending(months_analysis: dict) -> dict:
 def create_budget_template(analysis: dict, current_stats: dict) -> dict:
 
     """
-    Creates budget recommendations based on historical analysis and current financial situation.
+    Creates budget recommendations based on historical financial analysis and current statistics.
 
     Args:
-        analysis (dict): Historical spending analysis
-        current_stats (dict): Current period statistics from calculate_basic_stats
+        analysis (dict): Historical spending analysis from analyze_historical_spending()
+        current_stats (dict): Current financial statistics from calculate_basic_stats()
+
     Returns:
-        dict: Budget recommendations with verdict, advice and goal
+        dict: Budget recommendations including verdict, advice, goal, and budget limits per category.
     """
 
-    avg_spending = analysis["average_monthly_spending"]
+    avg_spending_by_category = analysis["top_categories"]
     total_avg_spending = analysis["total_avg_spending"]
     avg_income = analysis["average_monthly_income"]
-    
+
     current_income = current_stats["total_income"]
     current_spending = current_stats["total_expense"]
-    current_savings = current_income - current_spending
-    
-    budget_limits = {}
-    for category, avg_amount in avg_spending.items():
-        budget_limits[category] = round(avg_amount * 0.9)
 
-    verdict = ""
-    advice = ""
-    goal = ""
-    
+    budget_limits = {
+        category: round(avg_amount * 0.9, 2)
+        for category, avg_amount in avg_spending_by_category.items()
+    }
+
     if current_income >= avg_income and current_spending <= total_avg_spending:
-        verdict = ru.GOOD_VERDICT
-    
+        verdict = ru.VERDICT_1
+
         if analysis["top_categories"]:
             top_category = list(analysis["top_categories"].keys())[0]
             top_amount = analysis["top_categories"][top_category]
-            suggested_reduction = round(top_amount * 0.1)
-            advice = f"💡 Совет: Попробуйте сократить траты на {top_category} на {suggested_reduction} руб."
+            percent_of_total = (top_amount / total_avg_spending * 100) if total_avg_spending > 0 else 0
+            suggested_reduction = 10
+            advice = f"{ru.ADVICE_1}{top_category}{ru.ADVICE_2}{suggested_reduction}%\n{ru.ADVICE_3}{percent_of_total:.1f}%{ru.ADVICE_4}"
         else:
-            advice = "💡 Совет: Продолжайте в том же духе!"
+            advice = ru.ADVICE_5
     else:
         if current_income < avg_income:
-            income_diff = avg_income - current_income
-            verdict = "⚠️ Доход ниже среднего"
-            advice = f"💡 Совет: Рассмотрите варианты увеличения дохода на {income_diff:.0f} руб."
+            income_diff_percent = ((avg_income - current_income) / avg_income * 100) if avg_income > 0 else 0
+            verdict = ru.VERDICt_2
+            advice = f"{ru.ADVICE_6}{income_diff_percent:.1f}%."
         else:
-            spending_diff = current_spending - total_avg_spending
-            verdict = "⚠️ Траты превышают средние"
-            advice = f"💡 Совет: Постарайтесь сократить расходы на {spending_diff:.0f} руб."
-    
-    savings_target = round(current_income * 0.2)
-    goal = f"🎯 Цель: Накопить {savings_target} руб. к концу месяца"
-    
+            spending_diff_percent = ((current_spending - total_avg_spending) / total_avg_spending * 100) if total_avg_spending > 0 else 0
+            verdict = ru.VERDICT_3
+            advice = f"{ru.ADVICE_7}{spending_diff_percent:.1f}%."
+
+    raw_target = current_income * 0.2
+    savings_target = int(round(raw_target / 5000) * 5000)
+    goal = f"{ru.GOAL_1}{savings_target:,}{ru.GOAL_2}".replace(",", " ")
+
     return {
         "verdict": verdict,
         "advice": advice,
         "goal": goal,
         "budget_limits": budget_limits,
         "savings_target": savings_target
-    }
-
-
-def compare_budget_vs_actual(budget: dict, actual_transactions: list, category_stats: dict) -> dict:
-
-    """
-    Compares planned budget with actual spending and provides category-specific analysis.
-
-    Args:
-        budget (dict): Budget recommendations from create_budget_template
-        actual_transactions (list): Current period transactions
-        category_stats (dict): Category statistics from calculate_by_category
-    Returns:
-        dict: Comparison results with detailed analysis
-    """
-
-    actual_spending = {}
-    for category, data in category_stats.items():
-        actual_spending[category] = data["expense_total"]
-    
-    comparison = {}
-    within_budget = []
-    exceeded_budget = []
-    
-    for category, budget_limit in budget["budget_limits"].items():
-        actual = actual_spending.get(category, 0)
-        difference = budget_limit - actual
-        status = "в рамках бюджета" if difference >= 0 else "превышение"
-        
-        comparison[category] = {
-            "budget": budget_limit,
-            "actual": actual,
-            "difference": abs(difference),
-            "status": status
-        }
-        
-        if status == "в рамках бюджета":
-            within_budget.append(category)
-        else:
-            exceeded_budget.append(category)
-    
-    total_budget = sum(budget["budget_limits"].values())
-    total_actual = sum(actual_spending.values())
-    overall_status = "в рамках бюджета" if total_actual <= total_budget else "превышение"
-    
-    return {
-        "comparison": comparison,
-        "within_budget": within_budget,
-        "exceeded_budget": exceeded_budget,
-        "total_budget": total_budget,
-        "total_actual": total_actual,
-        "overall_status": overall_status
     }
 
 
@@ -496,7 +446,7 @@ def compare_budget_vs_actual(budget: dict, category_stats: dict) -> dict:
     for category, budget_limit in budget["budget_limits"].items():
         actual = actual_spending.get(category, 0)
         difference = budget_limit - actual
-        status = "в рамках бюджета" if difference >= 0 else "превышение"
+        status = True if difference >= 0 else False
         
         comparison[category] = {
             "budget": budget_limit,
@@ -505,14 +455,14 @@ def compare_budget_vs_actual(budget: dict, category_stats: dict) -> dict:
             "status": status
         }
         
-        if status == "в рамках бюджета":
+        if status:
             within_budget.append(category)
         else:
             exceeded_budget.append(category)
     
     total_budget = sum(budget["budget_limits"].values())
     total_actual = sum(actual_spending.values())
-    overall_status = "в рамках бюджета" if total_actual <= total_budget else "превышение"
+    overall_status = True if total_actual <= total_budget else False
     
     return {
         "comparison": comparison,
@@ -535,23 +485,23 @@ def print_report(stats: dict, category_stats: dict, budget: dict, budget_compari
         budget (dict): Budget template dictionary from create_budget_template().
     """
 
-    print("=== ФИНАНСОВЫЙ ОТЧЕТ ===\n")
-    print("ОСНОВНЫЕ ПОКАЗАТЕЛИ:")
-    print(f"  💰 Доходы: {_format_rub(stats.get("total_income"))}")
-    print(f"  💸 Расходы: {_format_rub(stats.get("total_expense"))}")
-    print(f"  ⚖️ Баланс: {_format_rub(stats.get("balance"))}")
-    print("\nРАСХОДЫ ПО КАТЕГОРИЯМ:")
+    print(ru.FINANCIAL_REPORT)
+    print(ru.MAIN_STATISTICS)
+    print(f"{ru.INCOME}{_format_rub(stats.get("total_income"))}")
+    print(f"{ru.EXPENSE}{_format_rub(stats.get("total_expense"))}")
+    print(f"{ru.BALANCE}{_format_rub(stats.get("balance"))}")
+    print(ru.CATEGORY_EXPENSES)
     for category, data in category_stats.items():
         print(f"  {category}: {_format_rub(data.get("expense_total"))} ({data.get("percent_of_expenses")}%)")
-    print("\nРЕКОМЕНДАЦИИ ПО БЮДЖЕТУ:")
+    print(ru.BUDGET_REPORT)
     print(budget["verdict"])
     print(budget["advice"])
     print(budget["goal"])
-    if budget_comparison["overall_status"] == "в рамках бюджета":
-        print("\n📊 ВЫПОЛНЕНИЕ БЮДЖЕТА: ✅ В рамках плана")
+    if budget_comparison["overall_status"]:
+        print(ru.BUDGET_REPORT_1)
     else:
         overspend = budget_comparison["total_actual"] - budget_comparison["total_budget"]
-        print(f"\n📊 ВЫПОЛНЕНИЕ БЮДЖЕТА: ⚠️ Превышение на {overspend:,.0f} руб.".replace(',', ' '))
+        print(f"{ru.BUDGET_REPORT_2}{_format_rub(overspend)}")
 
 
 def main():
@@ -560,7 +510,7 @@ def main():
     Main function to run the financial analysis and reporting. 
     """
 
-    transactions = import_financial_data("money.csv")
+    transactions = import_financial_data(r"money.csv")
 
     categorized_transactions = categorize_all_transactions(transactions)
     
@@ -568,7 +518,7 @@ def main():
     months_analysis = analyze_by_time(categorized_transactions)
     category_stats = calculate_by_category(categorized_transactions)
     
-    analysis = analyze_historical_spending(stats, months_analysis, )
+    analysis = analyze_historical_spending(months_analysis)
     budget = create_budget_template(analysis, stats)
     budget_comparison = compare_budget_vs_actual(budget, category_stats)
     
