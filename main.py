@@ -8,7 +8,7 @@ from collections import defaultdict
 import ru_local as ru
 
 
-def _parse_date(date_str: str) -> str | None:
+def _parse_date(date_str: str) -> datetime | None:
 
     """
     Utility function to parse date from string to datetime object.
@@ -403,7 +403,7 @@ def create_budget_template(analysis: dict, current_stats: dict) -> dict:
     else:
         if current_income < avg_income:
             income_diff_percent = ((avg_income - current_income) / avg_income * 100) if avg_income > 0 else 0
-            verdict = ru.VERDICt_2
+            verdict = ru.VERDICT_2
             advice = f"{ru.ADVICE_6}{income_diff_percent:.1f}%."
         else:
             spending_diff_percent = ((current_spending - total_avg_spending) / total_avg_spending * 100) if total_avg_spending > 0 else 0
@@ -487,9 +487,9 @@ def print_report(stats: dict, category_stats: dict, budget: dict, budget_compari
 
     print(ru.FINANCIAL_REPORT)
     print(ru.MAIN_STATISTICS)
-    print(f"{ru.INCOME}{_format_rub(stats.get("total_income"))}")
-    print(f"{ru.EXPENSE}{_format_rub(stats.get("total_expense"))}")
-    print(f"{ru.BALANCE}{_format_rub(stats.get("balance"))}")
+    print(f"{ru.INCOME}{_format_rub(stats.get('total_income'))}")
+    print(f"{ru.EXPENSE}{_format_rub(stats.get('total_expense'))}")
+    print(f"{ru.BALANCE}{_format_rub(stats.get('balance'))}")
     print(ru.CATEGORY_EXPENSES)
     for category, data in category_stats.items():
         print(f"  {category}: {_format_rub(data.get("expense_total"))} ({data.get("percent_of_expenses")}%)")
